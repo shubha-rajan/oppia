@@ -22,8 +22,11 @@ from __future__ import unicode_literals  # pylint: disable=import-only-modules
 import datetime
 import unittest
 
+from core.domain import cron_services
 from core.platform import models
 from jobs import base_model_validator_errors as errors
+
+import apache_beam as beam
 
 (base_models, user_models) = models.Registry.import_models(
     [models.NAMES.base_model, models.NAMES.user])
@@ -50,11 +53,20 @@ class ModelTimestampRelationshipErrorTests(ValidatorErrorTestBase):
             last_updated=self.year_ago)
         error = errors.ModelTimestampRelationshipError(model)
 
+        key = 'ModelTimestampRelationshipError'
+        self.assertEqual(error.key, key)
+
         msg = (
             'Entity id %s: The created_on field has a value %s which '
             'is greater than the value %s of last_updated field'
             % (model.id, model.created_on, model.last_updated))
         self.assertEqual(error.message, msg)
+
+    def test_coder_is_row_coder(self):
+        coder = beam.coders.registry.get_coder(
+            errors.ModelTimestampRelationshipError)
+
+        self.assertEqual(coder.__class__, beam.coders.RowCoder)
 
 
 class ModelMutatedDuringJobErrorTests(ValidatorErrorTestBase):
@@ -65,12 +77,21 @@ class ModelMutatedDuringJobErrorTests(ValidatorErrorTestBase):
             last_updated=self.year_later)
         error = errors.ModelMutatedDuringJobError(model)
 
+        key = 'ModelMutatedDuringJobError'
+        self.assertEqual(error.key, key)
+
         msg = (
             'Entity id %s: The last_updated field has a value %s which '
             'is greater than the time when the job was run'
             % (model.id, model.last_updated))
 
         self.assertEqual(error.message, msg)
+
+    def test_coder_is_row_coder(self):
+        coder = beam.coders.registry.get_coder(
+            errors.ModelMutatedDuringJobError)
+
+        self.assertEqual(coder.__class__, beam.coders.RowCoder)
 
 
 class ModelInvalidIdErrorTests(ValidatorErrorTestBase):
@@ -81,11 +102,20 @@ class ModelInvalidIdErrorTests(ValidatorErrorTestBase):
             last_updated=self.now)
         error = errors.ModelInvalidIdError(model)
 
+        key = 'ModelInvalidIdError'
+        self.assertEqual(error.key, key)
+
         msg = (
             'Entity id %s: Entity id does not match regex pattern'
             % (model.id))
 
         self.assertEqual(error.message, msg)
+
+    def test_coder_is_row_coder(self):
+        coder = beam.coders.registry.get_coder(
+            errors.ModelInvalidIdError)
+
+        self.assertEqual(coder.__class__, beam.coders.RowCoder)
 
 
 class ModelExpiredErrorTests(ValidatorErrorTestBase):
@@ -98,8 +128,18 @@ class ModelExpiredErrorTests(ValidatorErrorTestBase):
 
         error = errors.ModelExpiredError(model)
 
+        key = 'ModelExpiredError'
+        self.assertEqual(error.key, key)
+
+        days = cron_services.PERIOD_TO_HARD_DELETE_MODELS_MARKED_AS_DELETED.days
         msg = (
             'Entity id %s: Model marked as deleted is older than %s days'
-            % (model.id, errors.PERIOD_TO_HARD_DELETE_MODEL_IN_DAYS))
+            % (model.id, days))
 
         self.assertEqual(error.message, msg)
+
+    def test_coder_is_row_coder(self):
+        coder = beam.coders.registry.get_coder(
+            errors.ModelExpiredError)
+
+        self.assertEqual(coder.__class__, beam.coders.RowCoder)

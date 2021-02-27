@@ -30,6 +30,7 @@ from __future__ import unicode_literals  # pylint: disable=import-only-modules
 
 import datetime
 import re
+import typing
 
 from core.domain import cron_services
 from core.platform import models
@@ -45,6 +46,7 @@ import apache_beam as beam
 MAX_CLOCK_SKEW_SECS = datetime.timedelta(seconds=1)
 
 
+@beam.typehints.with_output_types(typing.NamedTuple)
 class ValidateModelIdWithRegex(beam.DoFn):
     """DoFn to validate model ids against a given regex string."""
 
@@ -66,6 +68,7 @@ class ValidateModelIdWithRegex(beam.DoFn):
             yield errors.ModelInvalidIdError(model)
 
 
+@beam.typehints.with_output_types(typing.NamedTuple)
 class ValidateDeleted(beam.DoFn):
     """DoFn to check whether models marked for deletion are stale."""
 
@@ -90,6 +93,7 @@ class ValidateDeleted(beam.DoFn):
             yield errors.ModelExpiredError(model)
 
 
+@beam.typehints.with_output_types(typing.NamedTuple)
 class ValidateModelTimeFields(beam.DoFn):
     """DoFn to check whether created_on and last_updated timestamps are
     valid."""
@@ -114,6 +118,7 @@ class ValidateModelTimeFields(beam.DoFn):
             yield errors.ModelMutatedDuringJobError(model)
 
 
+@beam.typehints.with_output_types(typing.NamedTuple)
 class BaseModelValidator(beam.PTransform):
     """Composite beam Transform which returns a pipeline of validation
     errors."""

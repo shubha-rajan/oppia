@@ -19,101 +19,75 @@
 from __future__ import absolute_import  # pylint: disable=import-only-modules
 from __future__ import unicode_literals  # pylint: disable=import-only-modules
 
+import typing
+
 from core.domain import cron_services
-import python_utils
 
-DELETE_DAYS = cron_services.PERIOD_TO_HARD_DELETE_MODELS_MARKED_AS_DELETED.days
+import apache_beam as beam
 
-
-class ModelValidationError(python_utils.OBJECT):
-    """Base error class for model validations."""
-
-    def __init__(self, model):
-        self._base_message = 'Entity id %s:' % (model.id)
-
-    @property
-    def key(self):
-        """Property that returns the error class name."""
-        return self.__class__.__name__
-
-    @property
-    def base_message(self):
-        """Message property to override in subclasses."""
-        return self._base_message
-
-    @property
-    def message(self):
-        """Message property to override in subclasses."""
-        raise NotImplementedError
-
-    def __repr__(self):
-        return '%s: %s' % (self.key, self.message) if self.message else self.key
-
-    def __eq__(self, other):
-        if self.__class__ is other.__class__:
-            return (self.key, self.message) == (other.key, other.message)
-        return NotImplemented
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        return hash((self.__class__, self.key, self.message))
+ERROR_PARAMS = [('key', unicode), ('message', unicode)]  # pylint: disable=unicode-builtin
 
 
-class ModelTimestampRelationshipError(ModelValidationError):
+class ModelTimestampRelationshipError(
+        typing.NamedTuple('ModelTimestampRelationshipError', ERROR_PARAMS)):
+
     """Error class for time field model validation errors."""
 
-    def __init__(self, model):
-        super(ModelTimestampRelationshipError, self).__init__(model)
-        self._message = (
-            '%s The created_on field has a value %s which '
+    def __new__(cls, model):
+        message = (
+            'Entity id %s: The created_on field has a value %s which '
             'is greater than the value %s of last_updated field'
-            % (self.base_message, model.created_on, model.last_updated))
-
-    @property
-    def message(self):
-        return self._message
+            % (model.id, model.created_on, model.last_updated))
+        return super(ModelTimestampRelationshipError, cls).__new__(
+            cls, 'ModelTimestampRelationshipError', message)
 
 
-class ModelMutatedDuringJobError(ModelValidationError):
+class ModelMutatedDuringJobError(
+        typing.NamedTuple('ModelMutatedDuringJobError', ERROR_PARAMS)):
+
     """Error class for current time model validation errors."""
 
-    def __init__(self, model):
-        super(ModelMutatedDuringJobError, self).__init__(model)
-        self._message = (
-            '%s The last_updated field has a value %s which '
+    def __new__(cls, model):
+        message = (
+            'Entity id %s: The last_updated field has a value %s which '
             'is greater than the time when the job was run'
-            % (self.base_message, model.last_updated))
-
-    @property
-    def message(self):
-        return self._message
+            % (model.id, model.last_updated))
+        return super(ModelMutatedDuringJobError, cls).__new__(
+            cls, 'ModelMutatedDuringJobError', message)
 
 
-class ModelInvalidIdError(ModelValidationError):
+class ModelInvalidIdError(
+        typing.NamedTuple('ModelInvalidIdError', ERROR_PARAMS)):
+
     """Error class for id model validation errors."""
 
-    def __init__(self, model):
-        super(ModelInvalidIdError, self).__init__(model)
-        self._message = (
-            '%s Entity id does not match regex pattern'
-            % (self.base_message))
-
-    @property
-    def message(self):
-        return self._message
+    def __new__(cls, model):
+        message = (
+            'Entity id %s: Entity id does not match regex pattern'
+            % (model.id))
+        return super(ModelInvalidIdError, cls).__new__(
+            cls, 'ModelInvalidIdError', message)
 
 
-class ModelExpiredError(ModelValidationError):
+class ModelExpiredError(typing.NamedTuple('ModelExpiredError', ERROR_PARAMS)):
+
     """Error class for stale deletion validation errors."""
 
-    def __init__(self, model):
-        super(ModelExpiredError, self).__init__(model)
-        self._message = (
-            '%s Model marked as deleted is older than %s days'
-            % (self.base_message, DELETE_DAYS))
+    def __new__(cls, model):
+        days = cron_services.PERIOD_TO_HARD_DELETE_MODELS_MARKED_AS_DELETED.days
+        message = (
+            'Entity id %s: Model marked as deleted is older than %s days'
+            % (model.id, days))
+        return super(ModelExpiredError, cls).__new__(
+            cls, 'ModelExpiredError', message)
 
-    @property
-    def message(self):
-        return self._message
+
+ERROR_CLASSES = [
+    ModelTimestampRelationshipError,
+    ModelMutatedDuringJobError,
+    ModelInvalidIdError,
+    ModelExpiredError
+]
+
+for error_class in ERROR_CLASSES:
+    beam.coders.registry.register_coder(error_class, beam.coders.RowCoder)
